@@ -1,0 +1,24 @@
+Research Platform Test Document
+
+Company: TechCorp Inc.
+Industry: Technology
+Date: December 2024
+
+Executive Summary:
+This is a test document for the Research Platform MVP.
+It contains sample content to test PDF processing,
+text extraction, and AI-powered Q&A functionality.
+
+Key Points:
+• Document upload and processing capabilities
+• AI-powered document analysis using Gemini 2.5 Flash
+• Full-text search and filtering functionality
+• Company and industry categorization
+
+Technical Details:
+The platform uses FastAPI backend with MongoDB storage,
+React frontend with Shadcn UI components, and integrates
+with Gemini AI for intelligent document analysis.
+
+This document serves as a test case for validating
+the complete document workflow from upload to AI interaction.
