@@ -14,7 +14,7 @@ import bcrypt
 import jwt
 import pdfplumber
 import shutil
-from emergentintegrations.llm.chat import LlmChat, UserMessage, FileContentWithMimeType
+import google.generativeai as genai
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -303,22 +303,12 @@ async def ask_question(
     if not doc:
         raise HTTPException(status_code=404, detail='Document not found')
     
-    # Initialize LLM chat
-    api_key = os.environ.get('EMERGENT_LLM_KEY', '')
+    # Initialize Gemini
+    api_key = os.environ.get('GEMINI_API_KEY', '')
     if not api_key:
-        raise HTTPException(status_code=500, detail='LLM API key not configured')
+        raise HTTPException(status_code=500, detail='Gemini API key not configured')
     
-    chat = LlmChat(
-        api_key=api_key,
-        session_id=f"doc_{request.document_id}_{current_user.id}",
-        system_message=f"You are a research assistant analyzing documents. The document title is '{doc['title']}'. Provide accurate, detailed answers based on the document content."
-    ).with_model("gemini", "gemini-2.5-flash")
-    
-    # Create file attachment
-    file_content = FileContentWithMimeType(
-        file_path=doc['file_path'],
-        mime_type='application/pdf'
-    )
+    genai.configure(api_key=api_key)
     
     # Save user message
     user_msg = ChatMessage(
@@ -331,28 +321,38 @@ async def ask_question(
     user_msg_dict['timestamp'] = user_msg_dict['timestamp'].isoformat()
     await db.chats.insert_one(user_msg_dict)
     
-    # Get response from LLM
+    # Get response from Gemini
     try:
-        user_message = UserMessage(
-            text=request.question,
-            file_contents=[file_content]
-        )
-        response = await chat.send_message(user_message)
+        # Upload the PDF file to Gemini
+        uploaded_file = genai.upload_file(doc['file_path'])
+        
+        # Create model and generate response
+        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        
+        system_prompt = f"You are a research assistant analyzing documents. The document title is '{doc['title']}'. Provide accurate, detailed answers based on the document content."
+        
+        response = model.generate_content([
+            system_prompt,
+            uploaded_file,
+            request.question
+        ])
+        
+        answer_text = response.text
         
         # Save assistant message
         assistant_msg = ChatMessage(
             document_id=request.document_id,
             user_id=current_user.id,
             role='assistant',
-            content=response
+            content=answer_text
         )
         assistant_msg_dict = assistant_msg.model_dump()
         assistant_msg_dict['timestamp'] = assistant_msg_dict['timestamp'].isoformat()
         await db.chats.insert_one(assistant_msg_dict)
         
-        return {'answer': response}
+        return {'answer': answer_text}
     except Exception as e:
-        logging.error(f"Error calling LLM: {e}")
+        logging.error(f"Error calling Gemini: {e}")
         raise HTTPException(status_code=500, detail=f"Error processing question: {str(e)}")
 
 @api_router.get("/chat/{document_id}", response_model=List[ChatMessage])
